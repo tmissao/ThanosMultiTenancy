@@ -62,4 +62,20 @@ up()
 ## Results
 ---
 
-![demo](./artifacts/images/demo.webm)
+- Thanos Query - Stores
+![Thanos Query - Stores](./artifacts/images/thanos-query-stores.png)
+
+- Thanos Query - Results
+![Thanos Query - Results](./artifacts/images/thanos-query-results.png)
+
+- Grafana - Explore - Thanos Query
+![Grafana - Thanos Datasource](./artifacts/images/grafana-explore-thanos-query.png)
+
+- Grafana - Explore - PromProxy Tenant A
+![Grafana - PromProxy Tenant A Datasource](./artifacts/images/grafana-explore-promproxy-tenanta.png)
+
+- Grafana - Explore - PromProxy Tenant B
+![Grafana - PromProxy Tenant B Datasource](./artifacts/images/grafana-explore-promproxy-tenantb.png)
+
+- Demo
+![demo](./artifacts/images/demo.gif)
