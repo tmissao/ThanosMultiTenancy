@@ -1,0 +1,26 @@
+apiVersion: 1
+
+datasources:  
+  - name: Thanos Querier
+    type: prometheus
+    url: http://thanos-query:10900
+    access: proxy
+    isDefault: true
+
+  - name: PromProxy - Tenant A
+    type: prometheus
+    url: http://prom-label-proxy:8080
+    access: proxy
+    jsonData:
+      httpHeaderName1: X-Tenant
+    secureJsonData:
+      httpHeaderValue1: tenant-a
+
+  - name: PromProxy - Tenant B
+    type: prometheus
+    url: http://prom-label-proxy:8080
+    access: proxy
+    jsonData:
+      httpHeaderName1: X-Tenant
+    secureJsonData:
+      httpHeaderValue1: tenant-b

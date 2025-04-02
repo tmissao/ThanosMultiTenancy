@@ -1,0 +1,152 @@
+name: telegraf-influxdb
+
+services:
+  minio:
+    image: quay.io/minio/minio
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=adminpass
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  minio-init:
+    image: minio/mc
+    container_name: minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc alias set myminio http://minio:9000 admin adminpass;
+      /usr/bin/mc mb -p myminio/thanos;
+      exit 0;
+      "
+  thanos-store:
+    image: quay.io/thanos/thanos:v0.28.0
+    container_name: thanos-store
+    entrypoint:
+      - "/bin/sh"
+      - "-c"
+      - "sleep 5; /bin/thanos store --data-dir=/data --objstore.config-file=/etc/thanos/store.yaml"
+    volumes:
+      - ./thanos/thanos-store.yaml:/etc/thanos/store.yaml
+      - store-data:/data
+    ports:
+      - "10901:10901"
+    depends_on:
+      - minio-init
+  prometheus01:
+    image: prom/prometheus
+    user: root
+    restart: unless-stopped
+    volumes:
+    - ./prometheus/config/prometheus-tenant-a.yml:/etc/prometheus/prometheus.yml
+    command:
+    - '--config.file=/etc/prometheus/prometheus.yml'
+    - '--enable-feature=agent'
+    ports:
+      - "9090:9090"
+
+  prometheus02:
+    image: prom/prometheus
+    user: root
+    restart: unless-stopped
+    volumes:
+    - ./prometheus/config/prometheus-tenant-b.yml:/etc/prometheus/prometheus.yml
+    command:
+    - '--config.file=/etc/prometheus/prometheus.yml'
+    - '--enable-feature=agent'
+    ports:
+      - "9091:9090"
+
+  thanos-receiver01:
+    container_name: thanos-receiver01
+    image: quay.io/thanos/thanos:v0.28.0
+    ports:
+      - "11901:11901"
+      - "11902:11902"
+      - "19291:19291"
+    volumes:
+      - ./thanos/thanos-store.yaml:/etc/thanos/store.yaml
+      - receiver-data01:/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sleep 5;
+        exec thanos receive \
+          --tsdb.path=/data \
+          --grpc-address=0.0.0.0:11901 \
+          --http-address=0.0.0.0:11902 \
+          --remote-write.address=0.0.0.0:19291 \
+          --label=receiver_replica=\"r0\" \
+          --label=receiver_cluster=\"localhost\" \
+          --receive.default-tenant-id="tenant-a" \
+          --objstore.config-file=/etc/thanos/store.yaml
+
+  thanos-receiver02:
+    container_name: thanos-receiver02
+    image: quay.io/thanos/thanos:v0.28.0
+    ports:
+      - "12901:12901"
+      - "12902:12902"
+      - "20291:20291"
+    volumes:
+      - ./thanos/thanos-store.yaml:/etc/thanos/store.yaml
+      - receiver-data01:/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sleep 5;
+        exec thanos receive \
+          --tsdb.path=/data \
+          --grpc-address=0.0.0.0:12901 \
+          --http-address=0.0.0.0:12902 \
+          --remote-write.address=0.0.0.0:20291 \
+          --label=receiver_replica=\"r0\" \
+          --label=receiver_cluster=\"localhost\" \
+          --receive.default-tenant-id="tenant-b" \
+          --objstore.config-file=/etc/thanos/store.yaml
+
+  thanos-query:
+    image:  quay.io/thanos/thanos:v0.28.0
+    ports:
+      - "10900:10900"
+    command: >
+      query
+      --http-address=0.0.0.0:10900
+      --store=thanos-receiver01:11901
+      --store=thanos-receiver02:12901
+      --store=thanos-store:10901
+
+  prom-label-proxy:
+    image: quay.io/prometheuscommunity/prom-label-proxy:v0.11.0
+    command:
+      - "--label=tenant_id"
+      - "--header-name=X-Tenant"
+      - "--insecure-listen-address=0.0.0.0:8080"
+      - "--upstream=http://thanos-query:10900"
+    ports:
+      - "8080:8080"
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    restart: unless-stopped
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: true
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_SECURITY_DISABLE_LOGIN_FORM: true
+    volumes:
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+    ports:
+      - "3000:3000"
+
+volumes:
+  minio-data:
+  store-data:
+  receiver-data01:
+  receiver-data02:
